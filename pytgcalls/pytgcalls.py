@@ -47,8 +47,6 @@ class PyTgCalls(Methods, Scaffold):
         self.loop = None
         self.workers = workers
         self._binding_futures = set()
-        self._max_binding_futures = max(512, workers * 256)
-        self._broadcast_semaphore = None
         self._chat_lock = ChatLock()
         self.executor = ThreadPoolExecutor(
             self.workers,
@@ -61,15 +59,6 @@ class PyTgCalls(Methods, Scaffold):
             py_logger.warning(
                 'Dropping %s because the event loop is closed',
                 name,
-            )
-            return None
-
-        if len(self._binding_futures) >= self._max_binding_futures:
-            coro.close()
-            py_logger.warning(
-                'Dropping %s because too many binding callbacks are pending: %d',
-                name,
-                len(self._binding_futures),
             )
             return None
 

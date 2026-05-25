@@ -7,6 +7,7 @@ from typing import Tuple
 
 from .exceptions import YtDlpError
 from .ffmpeg import cleanup_commands
+from .ffmpeg import terminate_process
 from .list_to_cmd import list_to_cmd
 from .types.raw import VideoParameters
 
@@ -73,9 +74,9 @@ class YtDlp:
                     proc.communicate(),
                     20,
                 )
-            except asyncio.TimeoutError:
-                proc.terminate()
-                raise YtDlpError('yt-dlp process timeout')
+            except asyncio.TimeoutError as e:
+                await terminate_process(proc)
+                raise YtDlpError('yt-dlp process timeout') from e
             if stderr:
                 raise YtDlpError(stderr.decode())
             data = stdout.decode().strip().split('\n')

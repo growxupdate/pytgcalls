@@ -1,4 +1,5 @@
 import asyncio
+import contextlib
 import logging
 import os.path
 import re
@@ -20,6 +21,22 @@ from .exceptions import NoAudioSourceFound
 from .exceptions import NoVideoSourceFound
 from .types.raw import AudioParameters
 from .types.raw import VideoParameters
+
+
+async def terminate_process(process, grace_timeout: int = 3):
+    if process is None or process.returncode is not None:
+        return
+    with contextlib.suppress(ProcessLookupError):
+        process.terminate()
+    try:
+        await asyncio.wait_for(process.wait(), timeout=grace_timeout)
+        return
+    except asyncio.TimeoutError:
+        pass
+    with contextlib.suppress(ProcessLookupError):
+        process.kill()
+    with contextlib.suppress(Exception):
+        await process.wait()
 
 
 async def check_stream(
@@ -58,8 +75,11 @@ async def check_stream(
         format_content = result.get('format', [])
         if 'No such file' in stderr.decode('utf-8'):
             raise FileNotFoundError()
-    except (subprocess.TimeoutExpired, JSONDecodeError):
-        ffprobe.kill()
+    except asyncio.TimeoutError as e:
+        await terminate_process(ffprobe)
+        raise FFmpegError('ffprobe process timeout') from e
+    except JSONDecodeError:
+        await terminate_process(ffprobe)
         raise
 
     have_video = False
@@ -136,8 +156,11 @@ async def cleanup_commands(
                 timeout=20,
             )
             result = stdout.decode('utf-8')
-        except (subprocess.TimeoutExpired, JSONDecodeError):
-            proc_res.kill()
+        except asyncio.TimeoutError as e:
+            await terminate_process(proc_res)
+            raise FFmpegError(f'{commands[0]} process timeout') from e
+        except JSONDecodeError:
+            await terminate_process(proc_res)
             raise
         supported = re.findall(r'(?m)^ *(-\w+).*?\s+', result)
         supported += ['-i']
@@ -178,6 +201,9 @@ def build_command(
         command = command['audio']
 
     ffmpeg_command: List = [name]
+
+    if name == 'ffmpeg':
+        ffmpeg_command.append('-nostdin')
 
     ffmpeg_command += command['start']
 

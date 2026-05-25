@@ -13,9 +13,6 @@ class Start(Scaffold):
         if not self._is_running:
             self._is_running = True
             self.loop = asyncio.get_running_loop()
-            self._broadcast_semaphore = asyncio.Semaphore(
-                max(4, min(16, self.workers)),
-            )
             self._env_checker.check_environment()
             self._app.add_handler(self._handle_mtproto_updates)
             if not self._app.is_connected:
